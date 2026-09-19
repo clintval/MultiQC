@@ -1,4 +1,5 @@
 import logging
+import os
 
 from multiqc.base_module import BaseMultiqcModule, ModuleNoSamplesFound
 
@@ -29,6 +30,17 @@ class MultiqcModule(BaseMultiqcModule):
             license="MIT License",
             license_url="https://github.com/fulcrumgenomics/fgbio/blob/master/LICENSE",
         )
+
+        self.css = {
+            "assets/css/multiqc_fgbio.css": os.path.join(
+                os.path.dirname(__file__), "assets", "css", "multiqc_fgbio.css"
+            )
+        }
+        self.js = {
+            "assets/js/multiqc_fgbio.js": os.path.join(
+                os.path.dirname(__file__), "assets", "js", "multiqc_fgbio.js"
+            )
+        }
 
         n = dict()
 

@@ -1,12 +1,11 @@
+import json
 import logging
+import math
 from typing import Dict, List
 
-from multiqc import BaseMultiqcModule
-from multiqc.plots import linegraph
+from multiqc import BaseMultiqcModule, report
 
 log = logging.getLogger(__name__)
-
-MAX_FAMILY_SIZE = 20
 
 
 def run_collect_duplex_seq_metrics(module: BaseMultiqcModule) -> int:
@@ -15,7 +14,7 @@ def run_collect_duplex_seq_metrics(module: BaseMultiqcModule) -> int:
     if not data:
         return 0
 
-    _add_family_size_plot(module, data)
+    _add_family_size_section(module, data)
     _add_general_stats(module, data)
     return len(data)
 
@@ -60,16 +59,39 @@ def _parse_family_sizes(module: BaseMultiqcModule) -> Dict[str, List[Dict]]:
     return parsed
 
 
-def _add_family_size_plot(module: BaseMultiqcModule, data: Dict[str, List[Dict]]) -> None:
-    """Add a line graph showing raw read fractions by family size.
+def _compute_max_family_size(data: Dict[str, List[Dict]]) -> int:
+    """Compute the 95th percentile family size across all samples.
 
-    Three tabs: duplex fraction, orphaned fraction, and raw SSCS family counts.
+    Uses cumulative sums to avoid materializing per-read lists.
     """
-    duplex_frac_data = {}
-    orphan_frac_data = {}
-    duplex_count_data = {}
-    orphan_count_data = {}
+    fs_counts: Dict[int, int] = {}
+    for rows in data.values():
+        for r in rows:
+            count = r["ds_count"] + r["orphan_count"]
+            fs = r["family_size"]
+            fs_counts[fs] = fs_counts.get(fs, 0) + count
+    if not fs_counts:
+        return 20
+    total = sum(fs_counts.values())
+    threshold = math.ceil(0.95 * total)
+    cumulative = 0
+    for fs in sorted(fs_counts.keys()):
+        cumulative += fs_counts[fs]
+        if cumulative >= threshold:
+            return max(fs, 5)
+    return max(max(fs_counts.keys()), 5)
 
+
+def _add_family_size_section(module: BaseMultiqcModule, data: Dict[str, List[Dict]]) -> None:
+    """Add a heatmap + stacked bar chart section (FastQC Per Base Sequence Content style).
+
+    Default view: canvas heatmap with samples as rows and family sizes as columns,
+    colored by total read fraction intensity.
+    Click a row: Plotly stacked bar chart for that sample (duplex vs orphaned SSCS).
+    """
+    max_fs = _compute_max_family_size(data)
+
+    plot_data: Dict[str, Dict[int, Dict[str, float]]] = {}
     for s_name, rows in data.items():
         total_reads = sum(
             (r["ds_count"] + r["orphan_count"]) * r["family_size"]
@@ -78,77 +100,77 @@ def _add_family_size_plot(module: BaseMultiqcModule, data: Dict[str, List[Dict]]
         if total_reads == 0:
             continue
 
-        d_frac = {}
-        o_frac = {}
-        d_count = {}
-        o_count = {}
+        sample_plot = {}
         for row in rows:
             fs = row["family_size"]
-            if fs > MAX_FAMILY_SIZE:
+            if fs > max_fs:
                 continue
             duplex_reads = row["ds_count"] * fs
             orphan_reads = row["orphan_count"] * fs
-            d_frac[fs] = duplex_reads / total_reads
-            o_frac[fs] = orphan_reads / total_reads
-            d_count[fs] = row["ds_count"]
-            o_count[fs] = row["orphan_count"]
+            sample_plot[fs] = {
+                "duplex_frac": duplex_reads / total_reads,
+                "orphan_frac": orphan_reads / total_reads,
+            }
+        plot_data[s_name] = sample_plot
 
-        duplex_frac_data[f"{s_name} - Duplex"] = d_frac
-        orphan_frac_data[f"{s_name} - Orphan"] = o_frac
-        duplex_count_data[f"{s_name} - Duplex"] = d_count
-        orphan_count_data[f"{s_name} - Orphan"] = o_count
+    if not plot_data:
+        return
 
-    frac_data = {**duplex_frac_data, **orphan_frac_data}
-    count_data = {**duplex_count_data, **orphan_count_data}
-
-    pconfig = {
-        "id": "fgbio-duplex-family-sizes-plot",
-        "title": "fgbio: SSCS Family Size Distribution",
-        "xlab": "Family Size (raw reads per SSCS)",
-        "xmin": 1,
-        "xmax": MAX_FAMILY_SIZE,
-        "x_decimals": False,
-        "colors": {},
-        "data_labels": [
-            {
-                "name": "Read Fractions",
-                "ylab": "Fraction of Total Raw Reads",
-            },
-            {
-                "name": "Family Counts",
-                "ylab": "Number of SSCS Families",
-            },
-        ],
-    }
-
-    for s_name in data:
-        pconfig["colors"][f"{s_name} - Duplex"] = "#1b3a5c"
-        pconfig["colors"][f"{s_name} - Orphan"] = "#5ec4b5"
+    anchor = report.save_htmlid(f"{module.anchor}_family_size_heatmap_plot")
+    dump = json.dumps([module.anchor, plot_data])
+    html = f"""<div id="fgbio_family_size_plot_div">
+        <div class="alert alert-info">
+           <span class="material-symbols-outlined" style="font-size:16px;vertical-align:text-bottom;">touch_app</span>
+           Click a sample row to see a stacked bar chart for that dataset.
+        </div>
+        <h5><span class="s_name text-primary">Rollover for sample name</span></h5>
+        <div class="fgbio_family_size_heatmap_key">
+            Family Size: <span id="fgbio_heatmap_key_pos">-</span>
+            <div><span id="fgbio_heatmap_key_duplex"> Duplex: <span>-</span></span></div>
+            <div><span id="fgbio_heatmap_key_orphan"> Orphan: <span>-</span></span></div>
+        </div>
+        <div id="fgbio_family_size_heatmap_div" class="fgbio-overlay-plot">
+            <div id="{anchor}" class="fgbio_family_size_heatmap_plot hc-plot has-custom-export">
+                <canvas id="fgbio_family_size_heatmap" height="100%" width="800px" style="width:100%;"></canvas>
+            </div>
+        </div>
+        <div class="fgbio_family_size_legend">
+            <span class="fgbio-legend-swatch" style="background:#1b3a5c;"></span> High read fraction
+            <span style="margin-left:16px;"></span>
+            <span class="fgbio-legend-swatch" style="background:#ffffff;border:1px solid #ccc;"></span> Low read fraction
+        </div>
+        <div class="clearfix"></div>
+    </div>
+    <script type="application/json" class="fgbio_family_size_data">{dump}</script>
+    """
 
     module.add_section(
         name="CollectDuplexSeqMetrics: Family Sizes",
         anchor="fgbio-collectduplexseqmetrics-familysizes",
         description=(
             "Distribution of raw reads across SSCS family sizes from "
-            "<code>CollectDuplexSeqMetrics</code>. Duplex SSCS are part of a "
-            "complete duplex consensus; orphaned SSCS have no duplex partner."
+            "<code>CollectDuplexSeqMetrics</code>. Hover to see values; click a "
+            "sample to see its stacked bar chart."
         ),
         helptext="""
-        This plot shows the fraction of total raw reads contributed by each
-        single-strand consensus sequence (SSCS) family size. Each sample
-        produces two lines:
+        The heatmap shows the fraction of total raw reads at each family size,
+        with one row per sample. Darker colors indicate a higher fraction of
+        reads at that family size. Click a sample to see a detailed stacked
+        bar chart.
 
-        - **Duplex** (dark navy): families where both strands (AB and BA)
+        In the per-sample bar chart, each bar is split into two stacked
+        components:
+
+        - **Duplex SSCS** (dark navy): families where both strands (AB and BA)
           are present, forming a complete duplex consensus.
-        - **Orphaned** (teal): families where only one strand is present,
+        - **Orphaned SSCS** (teal): families where only one strand is present,
           so no duplex consensus can be formed.
 
-        The family size is the number of raw reads that were grouped together
-        to form a single SSCS. Higher family sizes indicate deeper per-strand
-        coverage. A large fraction of orphaned SSCS at low family sizes (1-2)
-        is typical and expected.
+        The family size is the number of raw reads grouped to form a single
+        SSCS. Peak annotations mark the family size with the highest read
+        fraction.
         """,
-        plot=linegraph.plot([frac_data, count_data], pconfig),
+        content=html,
     )
 
     module.write_data_file(

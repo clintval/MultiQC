@@ -1,0 +1,40 @@
+#fgbio_family_size_heatmap {
+  cursor: pointer;
+}
+#fgbio_family_size_heatmap_div .hc-plot-wrapper {
+  height: 300px;
+}
+.fgbio_family_size_heatmap_key {
+  font-size: 12px;
+}
+.fgbio_family_size_heatmap_key div {
+  display: inline-block;
+  width: 180px;
+  margin: 0 8px;
+}
+#fgbio_heatmap_key_pos {
+  width: 80px;
+}
+.fgbio_family_size_heatmap_key > span,
+.fgbio_family_size_heatmap_key div > span {
+  display: inline-block;
+  width: 80px;
+}
+#fgbio_heatmap_key_duplex {
+  border-bottom: 2px solid #1b3a5c;
+}
+#fgbio_heatmap_key_orphan {
+  border-bottom: 2px solid #5ec4b5;
+}
+.fgbio_family_size_legend {
+  font-size: 12px;
+  margin-top: 4px;
+}
+.fgbio_family_size_legend .fgbio-legend-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  vertical-align: middle;
+  border-radius: 2px;
+}
