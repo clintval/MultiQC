@@ -127,6 +127,28 @@ WGS_COVERAGE_TSV = (
 )
 
 
+ERROR_MISMATCH_TSV = (
+    "sample\tstratifier\tcovariate\ttotal_bases\terror_bases\tfrac_error\tq_score\n"
+    "HG00240\tall\tall\t1000000\t1000\t0.001000\t30.00\n"
+    "HG00240\tbq\t37\t900000\t500\t0.000556\t32.55\n"
+    "HG00240\tread_num,cycle\tR1,1\t1000\t4\t0.004000\t23.98\n"
+    "HG00240\tread_num,cycle\tR1,2\t1000\t1\t0.001000\t30.00\n"
+    "HG00240\tread_num,cycle\tR1,3\t1000\t1\t0.001000\t30.00\n"
+    "HG00240\tread_num,cycle\tR2,1\t1000\t2\t0.002000\t26.99\n"
+    "HG00240\tread_num,cycle\tR2,2\t1000\t1\t0.001000\t30.00\n"
+    "HG00240\tread_num,cycle\tR2,3\t1000\t1\t0.001000\t30.00\n"
+    "HG00240\tread_num,cycle\tR2,11\t1000\t9\t0.009000\t20.46\n"
+)
+
+# Only the `cycle` stratifier, which pools read 1 and read 2.
+ERROR_MISMATCH_POOLED_TSV = (
+    "sample\tstratifier\tcovariate\ttotal_bases\terror_bases\tfrac_error\tq_score\n"
+    "HG00240\tall\tall\t1000000\t1000\t0.001000\t30.00\n"
+    "HG00240\tcycle\t1\t2000\t6\t0.003000\t25.23\n"
+    "HG00240\tcycle\t2\t2000\t2\t0.001000\t30.00\n"
+)
+
+
 @pytest.fixture
 def run_riker_module(tmp_path):
     """Factory: write the given content to a temp file and run the riker module against it."""
@@ -272,6 +294,53 @@ def test_wgs_metrics(run_riker_module):
 def test_wgs_coverage(run_riker_module):
     module = run_riker_module("HG03953.wgs-coverage.txt", WGS_COVERAGE_TSV)
     _assert_one_sample_for_tool(module, "wgs", "HG03953")
+
+
+def _error_mismatch_row(run_riker_module, content):
+    from multiqc import config
+
+    original = config.preserve_module_raw_data
+    config.preserve_module_raw_data = True
+    try:
+        module = run_riker_module("HG00240.error-mismatch.txt", content)
+    finally:
+        config.preserve_module_raw_data = original
+    return module.saved_raw_data["multiqc_riker_error_mismatch"]["HG00240"]
+
+
+def test_error_mismatch(run_riker_module):
+    module = run_riker_module("HG00240.error-mismatch.txt", ERROR_MISMATCH_TSV)
+    _assert_one_sample_for_tool(module, "error", "HG00240")
+
+
+def test_error_mismatch_summarises_the_first_cycle(run_riker_module):
+    """Cycle 1 pools read 1 and read 2 and is compared against cycles 2 to 10 only."""
+    row = _error_mismatch_row(run_riker_module, ERROR_MISMATCH_TSV)
+    assert row["frac_error"] == pytest.approx(0.001)
+    assert row["q_score"] == pytest.approx(30.0)
+    assert row["cycle1_frac_error"] == pytest.approx(0.003)
+    assert row["cycle1_fold"] == pytest.approx(3.0)
+
+
+def test_error_mismatch_plots_each_read_by_cycle(run_riker_module):
+    run_riker_module("HG00240.error-mismatch.txt", ERROR_MISMATCH_TSV)
+    plot = report.plot_by_id["riker_error_mismatch_by_cycle"]
+    assert {line.name for line in plot.datasets[0].lines} == {"HG00240_R1", "HG00240_R2"}
+
+
+def test_error_mismatch_falls_back_to_pooled_cycles(run_riker_module):
+    row = _error_mismatch_row(run_riker_module, ERROR_MISMATCH_POOLED_TSV)
+    assert row["cycle1_fold"] == pytest.approx(3.0)
+    plot = report.plot_by_id["riker_error_mismatch_by_cycle"]
+    assert {line.name for line in plot.datasets[0].lines} == {"HG00240"}
+
+
+def test_error_mismatch_without_cycles_has_no_fold(run_riker_module):
+    content = "\n".join(ERROR_MISMATCH_TSV.split("\n")[:3]) + "\n"
+    row = _error_mismatch_row(run_riker_module, content)
+    assert row["frac_error"] == pytest.approx(0.001)
+    assert row["cycle1_fold"] is None
+    assert "riker_error_mismatch_by_cycle" not in report.plot_by_id
 
 
 def test_basic_base_distribution_data_file_has_all_bases(run_riker_module):
