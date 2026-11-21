@@ -4,7 +4,7 @@ Each file has one row per (stratifier, covariate) combination, e.g. error rate b
 quality ('bq') or by read cycle. The row where both are 'all' holds the overall metrics for
 the sample, and is one reported in general stats. When the `read_num,cycle` or `cycle`
 stratifier is present, the mismatch rate is also plotted by cycle, and the first cycle is
-summarised against the cycles after it.
+compared against a baseline at cycles 11 to 20.
 
 """
 
@@ -17,8 +17,8 @@ from .util import read_tsv, to_float, to_int
 
 log = logging.getLogger(__name__)
 
-# Cycles pooled as the baseline that the first cycle is compared against.
-_BASELINE_CYCLES = range(2, 11)
+# Cycles pooled as the baseline for cycle 1, past the noisy early cycles and any inline UMI.
+_BASELINE_CYCLES = range(11, 21)
 
 
 def parse_reports(module):
@@ -129,7 +129,7 @@ def _parse_mismatch(module) -> set:
         },
         "cycle1_fold": {
             "title": "Cycle 1 fold",
-            "description": "Mismatch rate at cycle 1 divided by the pooled mismatch rate at cycles 2 to 10",
+            "description": "Mismatch rate at cycle 1 divided by the pooled mismatch rate at cycles 11 to 20",
             "min": 0,
             "suffix": "x",
             "format": "{:,.2f}",
@@ -144,7 +144,7 @@ def _parse_mismatch(module) -> set:
 
 
 def _first_cycle_summary(by_read: dict[str | None, dict[int, tuple[int, int]]]) -> dict[str, float | None]:
-    """Mismatch rate at cycle 1, and its fold over cycles 2 to 10, with every read pooled."""
+    """Mismatch rate at cycle 1, and its fold over cycles 11 to 20, with every read pooled."""
     pooled: dict[int, list[int]] = defaultdict(lambda: [0, 0])
     for by_cycle in by_read.values():
         for cycle, (total, errors) in by_cycle.items():
@@ -190,6 +190,10 @@ def _add_by_cycle_section(module, counts_by_sample: dict[str, dict[str | None, d
             quality filters to the reference. Cycle 1 is the first base of the read as sequenced.
             When riker is run with the `read_num,cycle` stratifier, read 1 and read 2 are shown as
             separate `_R1` / `_R2` samples.
+
+            The hidden `Cycle 1 fold` General Statistics column divides the cycle 1 mismatch rate by
+            the pooled rate at cycles 11 to 20. The baseline skips the first ten cycles, which are
+            noisier and may hold an inline barcode or UMI.
 
             A spike at the first cycles points to damage or misincorporation at fragment ends, for
             example from end repair or gap filling during library preparation. Known variant sites
