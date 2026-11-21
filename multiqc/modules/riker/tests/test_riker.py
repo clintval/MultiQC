@@ -132,12 +132,14 @@ ERROR_MISMATCH_TSV = (
     "HG00240\tall\tall\t1000000\t1000\t0.001000\t30.00\n"
     "HG00240\tbq\t37\t900000\t500\t0.000556\t32.55\n"
     "HG00240\tread_num,cycle\tR1,1\t1000\t4\t0.004000\t23.98\n"
-    "HG00240\tread_num,cycle\tR1,2\t1000\t1\t0.001000\t30.00\n"
-    "HG00240\tread_num,cycle\tR1,3\t1000\t1\t0.001000\t30.00\n"
+    "HG00240\tread_num,cycle\tR1,9\t1000\t9\t0.009000\t20.46\n"
+    "HG00240\tread_num,cycle\tR1,11\t1000\t1\t0.001000\t30.00\n"
+    "HG00240\tread_num,cycle\tR1,15\t1000\t1\t0.001000\t30.00\n"
     "HG00240\tread_num,cycle\tR2,1\t1000\t2\t0.002000\t26.99\n"
-    "HG00240\tread_num,cycle\tR2,2\t1000\t1\t0.001000\t30.00\n"
-    "HG00240\tread_num,cycle\tR2,3\t1000\t1\t0.001000\t30.00\n"
-    "HG00240\tread_num,cycle\tR2,11\t1000\t9\t0.009000\t20.46\n"
+    "HG00240\tread_num,cycle\tR2,10\t1000\t9\t0.009000\t20.46\n"
+    "HG00240\tread_num,cycle\tR2,16\t1000\t1\t0.001000\t30.00\n"
+    "HG00240\tread_num,cycle\tR2,20\t1000\t1\t0.001000\t30.00\n"
+    "HG00240\tread_num,cycle\tR2,21\t1000\t9\t0.009000\t20.46\n"
 )
 
 # Only the `cycle` stratifier, which pools read 1 and read 2.
@@ -145,7 +147,7 @@ ERROR_MISMATCH_POOLED_TSV = (
     "sample\tstratifier\tcovariate\ttotal_bases\terror_bases\tfrac_error\tq_score\n"
     "HG00240\tall\tall\t1000000\t1000\t0.001000\t30.00\n"
     "HG00240\tcycle\t1\t2000\t6\t0.003000\t25.23\n"
-    "HG00240\tcycle\t2\t2000\t2\t0.001000\t30.00\n"
+    "HG00240\tcycle\t11\t2000\t2\t0.001000\t30.00\n"
 )
 
 
@@ -314,7 +316,7 @@ def test_error_mismatch(run_riker_module):
 
 
 def test_error_mismatch_summarises_the_first_cycle(run_riker_module):
-    """Cycle 1 pools read 1 and read 2 and is compared against cycles 2 to 10 only."""
+    """Cycle 1 pools read 1 and read 2 and is compared against cycles 11 to 20 only."""
     row = _error_mismatch_row(run_riker_module, ERROR_MISMATCH_TSV)
     assert row["frac_error"] == pytest.approx(0.001)
     assert row["q_score"] == pytest.approx(30.0)
